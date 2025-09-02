@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2FA Codes</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 2rem; }
+        h1 { text-align: center; color: #333; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; max-width: 1200px; margin: 0 auto; }
+        .card { background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); padding: 1.5rem; text-align: center; }
+        .account-name { font-size: 1.2rem; color: #555; margin: 0 0 0.5rem 0; }
+        .code { font-size: 2.5rem; font-weight: bold; color: #007bff; letter-spacing: 2px; margin: 0; }
+        .progress-bar { width: 100%; background-color: #e9ecef; border-radius: 4px; height: 8px; margin-top: 1rem; overflow: hidden; }
+        .progress { background-color: #28a745; height: 100%; width: 100%; transition: width 1s linear; }
+    </style>
+</head>
+<body>
+    <h1>Your 2FA Codes</h1>
+    <div class="grid" id="codes-grid">
+        {{range .Accounts}}
+        <div class="card" data-account-name="{{.Name}}">
+            <p class="account-name">{{.Name}}</p>
+            <p class="code">{{.Code}}</p>
+            <div class="progress-bar"><div class="progress"></div></div>
+        </div>
+        {{end}}
+    </div>
+
+    <script>
+        function updateCodes() {
+            fetch('/api/codes')
+                .then(response => {
+                    if (!response.ok) {
+                        // If session expires or something goes wrong, redirect to login
+                        window.location.href = '/';
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    data.forEach(acc => {
+                        const card = document.querySelector(`.card[data-account-name="${acc.Name}"]`);
+                        if (card) {
+                            card.querySelector('.code').textContent = acc.Code;
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching codes:', error);
+                    window.location.href = '/';
+                });
+        }
+
+        function updateTimer() {
+            const seconds = new Date().getSeconds() % 30;
+            const percentage = ((30 - seconds) / 30) * 100;
+            document.querySelectorAll('.progress').forEach(p => {
+                // Reset transition at the start of a new cycle
+                if (seconds === 0) {
+                    p.style.transition = 'none';
+                    p.style.width = '100%';
+                    // Force reflow
+                    p.offsetHeight; 
+                    p.style.transition = 'width 1s linear';
+                }
+                p.style.width = percentage + '%';
+            });
+
+            // Fetch new codes every 15 seconds to be safe
+            if (seconds % 15 === 0) {
+                 updateCodes();
+            }
+        }
+
+        // Initial fetch and then set intervals
+        updateCodes();
+        updateTimer();
+        setInterval(updateTimer, 1000);
+    </script>
+</body>
+</html>
