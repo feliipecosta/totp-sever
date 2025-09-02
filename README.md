@@ -9,7 +9,22 @@ The application stores your 2FA secrets in an encrypted file (`secrets.enc`) and
 -   **Secure**: Your 2FA secrets are encrypted using AES-256-GCM and can only be decrypted with your password.
 -   **Self-hosted**: You have full control over your data.
 -   **Simple**: The application is easy to set up and use.
--   **Real-time updates**: The codes are updated in real-time without needing to refresh the page.
+-   **Real-time updates**: The codes are updated automatically every 15 seconds without needing to refresh the page.
+-   **Session Management**: Smart session handling with manual refresh detection.
+-   **Auto-timeout**: Sessions automatically expire after 3 minutes of inactivity for security.
+
+## Security Features
+
+### Session Management
+- **Automatic Code Updates**: TOTP codes refresh automatically every 15 seconds without requiring re-authentication.
+- **Manual Refresh Protection**: When you manually refresh the page (F5, Ctrl+R), you'll be required to enter your password again for security.
+- **Session Isolation**: Each browser tab/window requires separate authentication.
+- **Auto-timeout**: Sessions expire automatically after 2 minutes of inactivity.
+
+### Encryption
+- Secrets are encrypted using AES-256-GCM with scrypt key derivation
+- Password-based encryption with salt for additional security
+- Secrets are only decrypted in memory when needed
 
 ## Setup
 
@@ -71,6 +86,20 @@ The application stores your 2FA secrets in an encrypted file (`secrets.enc`) and
 1.  Open your web browser and navigate to `http://localhost:3450`.
 2.  Enter the password you used to encrypt your secrets.
 3.  The application will display the TOTP codes for your accounts.
+
+### Application Behavior
+
+- **Automatic Updates**: Once authenticated, TOTP codes will refresh automatically every 15 seconds.
+- **Manual Refresh**: If you manually refresh the page (F5 or Ctrl+R), you'll need to re-enter your password.
+- **New Tabs**: Opening the application in a new tab will require authentication.
+- **Session Timeout**: Sessions automatically expire after 2 minutes of inactivity for security.
+- **Code Display**: Each account shows its name, current TOTP code, and a visual progress bar indicating time remaining.
+
+## API Endpoints
+
+- `GET /` - Main page (unlock screen or codes page depending on session state)
+- `POST /unlock` - Authenticate and unlock secrets
+- `GET /api/codes` - Get current TOTP codes (requires valid session token)
 
 ## License
 
