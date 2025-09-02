@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the Go application.
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w" -o /2fa-server ./main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w" -o /totp-server ./main.go
 
 
 FROM gcr.io/distroless/static-debian11
@@ -23,7 +23,7 @@ FROM gcr.io/distroless/static-debian11
 WORKDIR /app
 
 # Copy the compiled binary from the builder stage.
-COPY --from=builder /2fa-server .
+COPY --from=builder /totp-server .
 
 # Copy the templates and the encrypted secrets file.
 # The container only needs the encrypted file.
