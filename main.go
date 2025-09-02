@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/feliipecosta/totp-server/pkg/cli"
 	"github.com/feliipecosta/totp-server/pkg/encryption"
 
 	"github.com/pquerna/otp/totp"
@@ -43,7 +44,7 @@ var (
 func main() {
 	encryptSecret, outputPath := cli.ParseFlags()
 
-	if outputPath != "" {
+	if encryptSecret != "" {
 		encryption.GenerateEncryption(encryptSecret, outputPath)
 		return
 	} else {
