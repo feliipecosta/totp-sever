@@ -12,10 +12,10 @@ import (
 	"golang.org/x/term"
 )
 
-func GenerateEncryption() {
+func GenerateEncryption(secretJson, outputPath string) {
 	fmt.Println("--- 2FA Secrets Encryptor ---")
 
-	plaintext, err := os.ReadFile(os.Args[2])
+	plaintext, err := os.ReadFile(secretJson)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to read secrets file: %v. Make sure the file exists in the parent directory.", err))
 	}
@@ -58,13 +58,21 @@ func GenerateEncryption() {
 	// Seal will encrypt and authenticate the plaintext
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 
-	// Write the salt + ciphertext to the output file
-	finalPayload := append(salt, ciphertext...)
-	err = os.WriteFile("../secrets.enc", finalPayload, 0644)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to write to secrets.enc: %v", err))
+	var outputFile string
+
+	if outputPath != "" {
+		outputFile = outputPath+"/secrets.enc"
+	} else {
+		outputFile = "secrets.enc"
 	}
 
-	fmt.Println("\nSuccessfully encrypted secrets.json -> secrets.enc")
+	// Write the salt + ciphertext to the output file
+	finalPayload := append(salt, ciphertext...)
+	err = os.WriteFile(outputFile, finalPayload, 0644)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to write to %s: %v", outputFile, err))
+	}
+
+	fmt.Printf("\nSuccessfully encrypted secrets.json -> %s\n", outputFile)
 	fmt.Println("You can now safely delete secrets.json.")
 }

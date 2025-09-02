@@ -41,12 +41,13 @@ var (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--encrypt-secret" {
-		if len(os.Args) < 3 {
-			log.Fatalf("Usage: go run main.go --encrypt-secret <secrets.json>")
-		}
-		encryption.GenerateEncryption(os.Args[2])
-		return 
+	encryptSecret, outputPath := cli.ParseFlags()
+
+	if outputPath != "" {
+		encryption.GenerateEncryption(encryptSecret, outputPath)
+		return
+	} else {
+		log.Fatalf("Usage: go run main.go --encrypt-secret <secrets.json>")
 	}
 
 	var err error

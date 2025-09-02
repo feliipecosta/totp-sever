@@ -1,4 +1,4 @@
-module github.com/feliipecosta/totp-sever
+module github.com/feliipecosta/totp-server
 
 go 1.25.0
 
