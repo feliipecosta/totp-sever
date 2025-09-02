@@ -1,44 +1,124 @@
 package api
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"html/template"
+	"net/http"
+	"log"
+	"sync"
+	"time"
+
+	"golang.org/x/crypto/scrypt"
 	"github.com/feliipecosta/totp-server/pkg/models"
 	"github.com/feliipecosta/totp-server/pkg/totp"
 )
 
-
 var (
 	templates         = template.Must(template.ParseFiles("templates/unlock.html", "templates/codes.html"))
-	encryptedData     []byte
+	sessionTimeout    time.Time
+	sessionToken      string
+	sessionMutex      sync.RWMutex
+	lastAccessTime    time.Time
 )
 
-func HandleIndex(w http.ResponseWriter, r *http.Request) {
-	secretsMutex.Lock()
-	decryptedAccounts = nil
-	secretsMutex.Unlock()
-	templates.ExecuteTemplate(w, "unlock.html", models.TemplateData{Error: ""})
-}
-
-func HandleAPICodes(w http.ResponseWriter, r *http.Request) {
+func HandleIndex(secretsMutex *sync.RWMutex, decryptedAccounts *[]models.Account, w http.ResponseWriter, r *http.Request) {
+	// Check if user provided a session token (indicating they have an active session)
+	providedToken := r.URL.Query().Get("token")
+	
+	sessionMutex.RLock()
+	currentSessionToken := sessionToken
+	sessionMutex.RUnlock()
+	
 	secretsMutex.RLock()
-	isUnlocked := len(decryptedAccounts) > 0
+	isUnlocked := len(*decryptedAccounts) > 0 && time.Now().Before(sessionTimeout)
 	secretsMutex.RUnlock()
 
-	if !isUnlocked {
+	// If we have an active session but no valid token provided, it's a manual refresh
+	if isUnlocked && (providedToken == "" || providedToken != currentSessionToken) {
+		// Manual refresh detected - invalidate session and require re-auth
+		secretsMutex.Lock()
+		*decryptedAccounts = nil
+		secretsMutex.Unlock()
+		
+		sessionMutex.Lock()
+		sessionToken = ""
+		sessionMutex.Unlock()
+		
+		templates.ExecuteTemplate(w, "unlock.html", models.TemplateData{Error: ""})
+		return
+	}
+
+	if isUnlocked {
+		// Update last access time
+		sessionMutex.Lock()
+		lastAccessTime = time.Now()
+		sessionMutex.Unlock()
+		
+		codes, err := totp.GenerateCodes(*decryptedAccounts, secretsMutex)
+		if err != nil {
+			http.Error(w, "Could not generate codes", http.StatusInternalServerError)
+			return
+		}
+		templates.ExecuteTemplate(w, "codes.html", models.TemplateData{Accounts: codes, SessionToken: currentSessionToken})
+	} else {
+		secretsMutex.Lock()
+		*decryptedAccounts = nil
+		secretsMutex.Unlock()
+		templates.ExecuteTemplate(w, "unlock.html", models.TemplateData{Error: ""})
+	}
+}
+
+// Helper function to check if referer contains unlock path
+func containsUnlockPath(referer string) bool {
+	if referer == "" {
+		return false
+	}
+	if len(referer) >= 7 && referer[len(referer)-7:] == "/unlock" {
+		return true
+	}
+	if len(referer) >= 1 && referer[len(referer)-1:] == "/" {
+		return true
+	}
+	return false
+}
+
+func HandleAPICodes(secretsMutex *sync.RWMutex, decryptedAccounts *[]models.Account, w http.ResponseWriter, r *http.Request) {
+	// Check session token for API calls too
+	sessionTokenFromClient := r.Header.Get("X-Session-Token")
+	
+	sessionMutex.RLock()
+	currentSessionToken := sessionToken
+	sessionMutex.RUnlock()
+	
+	secretsMutex.RLock()
+	isUnlocked := len(*decryptedAccounts) > 0 && time.Now().Before(sessionTimeout)
+	secretsMutex.RUnlock()
+
+	if !isUnlocked || sessionTokenFromClient != currentSessionToken {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	codes, err := totp.GenerateCodes()
+	// Update last access time for API calls
+	sessionMutex.Lock()
+	lastAccessTime = time.Now()
+	sessionMutex.Unlock()
+
+	codes, err := totp.GenerateCodes(*decryptedAccounts, secretsMutex)
 	if err != nil {
 		http.Error(w, "Could not generate codes", http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(codes)
 }
 
-func HandleUnlock(w http.ResponseWriter, r *http.Request) {
+func HandleUnlock(encryptedData []byte, secretsMutex *sync.RWMutex, decryptedAccounts *[]models.Account, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -101,14 +181,29 @@ func HandleUnlock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	secretsMutex.Lock()
-	decryptedAccounts = accounts
+	*decryptedAccounts = accounts
+	sessionTimeout = time.Now().Add(3 * time.Minute)
 	secretsMutex.Unlock()
 
+	// Generate a new session token
+	sessionMutex.Lock()
+	sessionToken = generateSessionToken()
+	currentSessionToken := sessionToken
+	lastAccessTime = time.Now()
+	sessionMutex.Unlock()
+
 	log.Println("Secrets successfully decrypted and loaded into memory.")
-	codes, err := totp.GenerateCodes()
+	codes, err := totp.GenerateCodes(*decryptedAccounts, secretsMutex)
 	if err != nil {
 		http.Error(w, "Could not generate codes", http.StatusInternalServerError)
 		return
 	}
-	templates.ExecuteTemplate(w, "codes.html", models.TemplateData{Accounts: codes})
+	templates.ExecuteTemplate(w, "codes.html", models.TemplateData{Accounts: codes, SessionToken: currentSessionToken})
+}
+
+// generateSessionToken creates a random session token
+func generateSessionToken() string {
+	bytes := make([]byte, 16)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
 }

@@ -4,22 +4,27 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/feliipecosta/totp-server/pkg/api"
 	"github.com/feliipecosta/totp-server/pkg/cli"
 	"github.com/feliipecosta/totp-server/pkg/encryption"
 	"github.com/feliipecosta/totp-server/pkg/models"
-	"github.com/feliipecosta/totp-server/pkg/totp"
+)
+
+var (
+	secretsMutex      = &sync.RWMutex{}
+	decryptedAccounts  *[]models.Account
+	encryptedData     []byte
 )
 
 func main() {
+	decryptedAccounts = new([]models.Account)
 	encryptSecret, outputPath := cli.ParseFlags()
 
 	if encryptSecret != "" {
 		encryption.GenerateEncryption(encryptSecret, outputPath)
 		return
-	} else {
-		log.Fatalf("Usage: go run main.go --encrypt-secret <secrets.json>")
 	}
 
 	var err error
@@ -28,9 +33,19 @@ func main() {
 		log.Fatalf("FATAL: secrets.enc not found. Please create it using the encrypt_tool. Error: %v", err)
 	}
 
-	http.HandleFunc("/", api.HandleIndex)
-	http.HandleFunc("/unlock", api.HandleUnlock)
-	http.HandleFunc("/api/codes", api.HandleAPICodes) // API endpoint for real-time updates
+	// CORRECT CODE
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// The router provides w and r, and we pass them along.
+		api.HandleIndex(secretsMutex, decryptedAccounts, w, r)
+	})
+
+	http.HandleFunc("/unlock", func(w http.ResponseWriter, r *http.Request) {
+		api.HandleUnlock(encryptedData, secretsMutex, decryptedAccounts, w, r)
+	})
+
+	http.HandleFunc("/api/codes", func(w http.ResponseWriter, r *http.Request) {
+		api.HandleAPICodes(secretsMutex, decryptedAccounts, w, r)
+	})
 
 	port := "3450"
 	log.Printf("Starting 2FA server on port %s...", port)
@@ -38,5 +53,3 @@ func main() {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
-
-
