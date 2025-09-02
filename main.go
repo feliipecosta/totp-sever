@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/feliipecosta/totp-server/pkg/encryption"
+
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/scrypt"
 )
@@ -39,6 +41,14 @@ var (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--encrypt-secret" {
+		if len(os.Args) < 3 {
+			log.Fatalf("Usage: go run main.go --encrypt-secret <secrets.json>")
+		}
+		encryption.GenerateEncryption(os.Args[2])
+		return 
+	}
+
 	var err error
 	encryptedData, err = os.ReadFile("secrets.enc")
 	if err != nil {
