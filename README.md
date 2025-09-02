@@ -75,7 +75,7 @@ The application stores your 2FA secrets in an encrypted file (`secrets.enc`) and
     docker run -p 3450:3450 -v $(pwd)/secrets.enc:/app/secrets.enc totp-server
     ```
 
-    **Building from source:**
+    **Running from source:**
 
     ```bash
     go run main.go
